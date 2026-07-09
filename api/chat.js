@@ -483,21 +483,12 @@ async function buildQueue(hasImage, history = []) {
 
 // ── 🔥 AMBIL ROLE LIMITS — SUPPORT role_limit & role_limits ──
 async function getRoleLimits() {
-  try {
-    const snap = await db.ref("system_settings").once("value");
-    const data = snap.val() || {};
-    return data.role_limits || data.role_limit || {};
-  } catch {
-    return {};
-  }
+  return {};
 }
 
 // ── 🔥 AMBIL SYSTEM SETTINGS ──
 async function getSystemSettings() {
-  try {
-    const snap = await db.ref("system_settings").once("value");
-    return snap.val() || {};
-  } catch { return {}; }
+  return {};
 }
 
 // ── 🔥 AMBIL LIMIT USER — PRIORITAS role_limit DULU ──
