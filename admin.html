@@ -1722,20 +1722,30 @@ tbody td{padding:10px 13px;font-size:12.5px;vertical-align:middle}
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script>
-// ══ CONFIG ══
-const FB_CONFIG = {
-  apiKey:            "AIzaSyDC0DSJ88fhxIJDCyqxpX9goh4W1gX2fQQ",
-  authDomain:        "xrezzky-ai.firebaseapp.com",
-  databaseURL:       "https://xrezzky-ai-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId:         "xrezzky-ai",
-  storageBucket:     "xrezzky-ai.firebasestorage.app",
-  messagingSenderId: "8326769744",
-  appId:             "1:8326769744:web:448856076321154986f555",
-};
+// ══ CONFIG (FIX: diambil dari /api/chat.js, gak lagi hardcode project lama) ══
+const API_BASE = "/api/chat.js";
+let auth = null;
+let db = null;
+let FB_WEB_API_KEY = "";
+
+async function initFirebase(){
+  let cfg;
+  try{
+    const r = await fetch(API_BASE + "?action=firebase-config", { signal: AbortSignal.timeout(8000) });
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    cfg = await r.json();
+  }catch(e){
+    console.error("Gagal ambil config Firebase dari /api:", e.message);
+    showLoginErr("⚠️ Gagal memuat konfigurasi server. Coba refresh halaman.\n\n"+e.message);
+    return false;
+  }
+  firebase.initializeApp(cfg);
+  auth = firebase.auth();
+  db   = firebase.database();
+  FB_WEB_API_KEY = cfg.apiKey || "";
+  return true;
+}
 const ADMIN_UIDS = [];
-firebase.initializeApp(FB_CONFIG);
-const auth = firebase.auth();
-const db   = firebase.database();
 
 let G = { users:{}, traffic:{}, guests:{}, settings:{}, dailyUsage:{}, me:null, myRole:null };
 let currentUid = null;
@@ -1866,6 +1876,7 @@ function confirm2(title,msg,icon="⚠️"){
 
 // ══ LOGIN ══
 async function doEmailLoginAdmin(){
+  if(!auth){ showLoginErr("Konfigurasi server belum siap, tunggu sebentar lalu coba lagi."); return; }
   const email=document.getElementById("ladmin-email")?.value?.trim();
   const pass=document.getElementById("ladmin-pass")?.value;
   if(!email||!pass){ showLoginErr("Email dan password wajib diisi."); return; }
@@ -1882,6 +1893,7 @@ async function doEmailLoginAdmin(){
 }
 
 async function doAdminResetPw(){
+  if(!auth){ showLoginErr("Konfigurasi server belum siap, tunggu sebentar lalu coba lagi."); return; }
   const email=document.getElementById("ladmin-email")?.value?.trim();
   if(!email){ showLoginErr("Masukkan email dulu sebelum reset password."); return; }
   try {
@@ -1891,7 +1903,8 @@ async function doAdminResetPw(){
   } catch(e){ showLoginErr("Gagal kirim reset: "+e.message); }
 }
 
-// ══ AUTH STATE ══
+// ══ AUTH STATE (FIX: dipasang setelah Firebase config berhasil dimuat) ══
+function bindAuthListener(){
 auth.onAuthStateChanged(async user=>{
   if(!user){ showGate(); return; }
   let myRole=null, isOwner1st=false;
@@ -1942,6 +1955,9 @@ auth.onAuthStateChanged(async user=>{
   }
   proceedLogin(user,isOwner1st?"OWNER":myRole,isOwner1st);
 });
+}
+
+initFirebase().then(ok=>{ if(ok) bindAuthListener(); });
 
 async function proceedLogin(user,finalRole,isNew){
   try {
@@ -3858,7 +3874,8 @@ async function doCreateUser(){
   if(!pass||pass.length<6){ showCuMsg("Password minimal 6 karakter.",false); return; }
   if(["OWNER","ADMIN"].includes(role)&&G.myRole!=="OWNER"){ showCuMsg("Hanya OWNER yang bisa membuat akun ADMIN/OWNER.",false); return; }
   try{
-    const apiKey="AIzaSyDC0DSJ88fhxIJDCyqxpX9goh4W1gX2fQQ";
+    const apiKey=FB_WEB_API_KEY;
+    if(!apiKey){ showCuMsg("Konfigurasi server belum siap, coba refresh halaman.",false); return; }
     const r=await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,password:pass,returnSecureToken:true})});
     const d=await r.json();
     if(d.error){ const em={"EMAIL_EXISTS":"Email sudah terdaftar.","INVALID_EMAIL":"Format email tidak valid.","WEAK_PASSWORD":"Password minimal 6 karakter."}; throw new Error(em[d.error.message]||d.error.message); }
