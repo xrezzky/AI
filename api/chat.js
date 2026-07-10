@@ -647,6 +647,47 @@ export default async function handler(req, res) {
     });
   }
 
+  // ── 🩺 DIAGNOSTIK KONEKSI FIREBASE ADMIN SDK — terisolasi, timeout jelas ──
+  //     Buka /api/chat.js?action=fbtest buat liat APAKAH server bisa nyambung
+  //     ke Realtime Database, dan kalau gagal, ERROR ASLINYA apa (bukan cuma
+  //     "timeout" generik kayak yang keliatan dari sisi client).
+  if (req.method === "GET" && req.query.action === "fbtest") {
+    const result = {
+      env_present: {
+        FIREBASE_PROJECT_ID: !!process.env.FIREBASE_PROJECT_ID,
+        FIREBASE_CLIENT_EMAIL: !!process.env.FIREBASE_CLIENT_EMAIL,
+        FIREBASE_PRIVATE_KEY: !!process.env.FIREBASE_PRIVATE_KEY,
+        FIREBASE_DATABASE_URL: !!process.env.FIREBASE_DATABASE_URL,
+      },
+      private_key_looks_valid: (process.env.FIREBASE_PRIVATE_KEY || "").includes("BEGIN PRIVATE KEY"),
+      database_url_value: process.env.FIREBASE_DATABASE_URL || null,
+      project_id_value: process.env.FIREBASE_PROJECT_ID || null,
+      client_email_value: process.env.FIREBASE_CLIENT_EMAIL || null,
+    };
+    const withTimeout = (p, ms, label) => Promise.race([
+      p,
+      new Promise((_, rej) => setTimeout(() => rej(new Error(`${label}: timeout setelah ${ms/1000}s — server gak dapet balasan sama sekali dari Firebase`)), ms))
+    ]);
+    try {
+      const testRef = db.ref("_healthcheck");
+      const stamp = Date.now();
+      await withTimeout(testRef.set(stamp), 8000, "write");
+      result.write_ok = true;
+      const snap = await withTimeout(testRef.once("value"), 8000, "read");
+      result.read_ok = true;
+      result.read_value_matches = snap.val() === stamp;
+      await testRef.remove().catch(() => {});
+      result.status = "✅ KONEKSI FIREBASE OK — Admin SDK berhasil baca & tulis ke Realtime Database.";
+    } catch (e) {
+      result.write_ok = result.write_ok ?? false;
+      result.read_ok = result.read_ok ?? false;
+      result.status = "❌ GAGAL KONEK — lihat 'error' & 'error_code' di bawah buat tau penyebabnya.";
+      result.error = e.message;
+      result.error_code = e.code || null;
+    }
+    return res.status(200).json(result);
+  }
+
   const ip = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
     req.socket?.remoteAddress ||
     "unknown";
