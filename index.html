@@ -1002,7 +1002,7 @@ async function submitRating() {
     rated = true;
     localStorage.setItem(LS_RATED, 'true');
 
-    msg.textContent = '✅ Rating tersimpan di Firebase! Terima kasih!';
+    msg.textContent = '✅ Rating tersimpan di Database! Terima kasih!';
     msg.className = 'rating-msg ok';
     document.getElementById('ratingSubmit').disabled = true;
 
