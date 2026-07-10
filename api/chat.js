@@ -652,6 +652,8 @@ export default async function handler(req, res) {
   //     ke Realtime Database, dan kalau gagal, ERROR ASLINYA apa (bukan cuma
   //     "timeout" generik kayak yang keliatan dari sisi client).
   if (req.method === "GET" && req.query.action === "fbtest") {
+    const rawKey = process.env.FIREBASE_PRIVATE_KEY || "";
+    const processedKey = rawKey.replace(/\\n/g, "\n");
     const result = {
       env_present: {
         FIREBASE_PROJECT_ID: !!process.env.FIREBASE_PROJECT_ID,
@@ -659,10 +661,23 @@ export default async function handler(req, res) {
         FIREBASE_PRIVATE_KEY: !!process.env.FIREBASE_PRIVATE_KEY,
         FIREBASE_DATABASE_URL: !!process.env.FIREBASE_DATABASE_URL,
       },
-      private_key_looks_valid: (process.env.FIREBASE_PRIVATE_KEY || "").includes("BEGIN PRIVATE KEY"),
       database_url_value: process.env.FIREBASE_DATABASE_URL || null,
       project_id_value: process.env.FIREBASE_PROJECT_ID || null,
       client_email_value: process.env.FIREBASE_CLIENT_EMAIL || null,
+      // 🔍 Cek bentuk private key TANPA nampilin isi rahasianya
+      private_key_check: {
+        raw_length: rawKey.length,
+        raw_starts_with: rawKey.slice(0, 27),                    // harus: -----BEGIN PRIVATE KEY-----
+        raw_ends_with: rawKey.slice(-25),                        // harus: ...-----END PRIVATE KEY-----(\n)
+        raw_has_literal_backslash_n: rawKey.includes("\\n"),     // true = masih ada teks "\n" mentah (perlu di-convert)
+        raw_has_real_newline: rawKey.includes("\n"),             // true = udah ada baris baru asli
+        processed_length_after_convert: processedKey.length,
+        processed_line_count: processedKey.split("\n").length,   // key RSA 2048-bit normalnya ~27-29 baris
+        starts_correctly: processedKey.startsWith("-----BEGIN PRIVATE KEY-----"),
+        ends_correctly: processedKey.trim().endsWith("-----END PRIVATE KEY-----"),
+        has_stray_quote_at_start: rawKey.startsWith('"') || rawKey.startsWith("'"),
+        has_stray_quote_at_end: rawKey.endsWith('"') || rawKey.endsWith("'"),
+      },
     };
     const withTimeout = (p, ms, label) => Promise.race([
       p,
