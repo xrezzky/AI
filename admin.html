@@ -1749,6 +1749,8 @@ const ADMIN_UIDS = [];
 
 let G = { users:{}, traffic:{}, guests:{}, settings:{}, dailyUsage:{}, me:null, myRole:null };
 let currentUid = null;
+let usersRenderPending = false;
+let roleGridRenderPending = false;
 let chatHistoryLimit = 20;
 let chartDaily = null;
 let chartRole = null;
@@ -2017,6 +2019,15 @@ function initApp(){
     el.addEventListener("click",()=>{ switchPage(el.dataset.page); closeMobileSidebar(); });
   });
   document.getElementById("mobileMenuBtn")?.addEventListener("click",openMobileSidebar);
+
+  // FIX: begitu admin selesai ngedit (fokus pindah keluar tabel/grid), baru sinkronin ulang
+  // ke data Firebase terbaru — biar gak ada render yang ke-skip selamanya.
+  document.getElementById("usrTbl")?.addEventListener("focusout",()=>{
+    setTimeout(()=>{ if(usersRenderPending) renderUsers(); },250);
+  });
+  document.getElementById("roleGrid")?.addEventListener("focusout",()=>{
+    setTimeout(()=>{ if(roleGridRenderPending) renderRoleGrid(); },250);
+  });
   document.getElementById("sideOverlay")?.addEventListener("click",closeMobileSidebar);
 
   document.querySelectorAll("#ratingStarFilter button").forEach(btn => {
@@ -2806,6 +2817,12 @@ function renderAnalytics(){
 
 // ══ USERS ══
 function renderUsers(){
+  // FIX: kalau admin lagi ngetik limit / buka dropdown role di tabel ini,
+  // JANGAN re-render dulu — nanti keyboard/dropdown-nya kepaksa nutup.
+  // Data tetap ke-refresh otomatis begitu fokusnya pindah (lihat listener di bawah).
+  const tblEl=document.getElementById("usrTbl");
+  if(tblEl && tblEl.contains(document.activeElement)){ usersRenderPending=true; return; }
+  usersRenderPending=false;
   const q=(document.getElementById("usrSearch")?.value||"").toLowerCase();
   const fr=document.getElementById("usrRole")?.value||"";
   let rows=Object.entries(G.users).filter(([uid])=>!isGuest(uid)).map(([uid,u])=>({uid,...u}));
@@ -3945,6 +3962,10 @@ async function saveAppInfo() {
 const ROLES_DEF=["SELLER","CS","MEMBER","GUEST"];
 const ROLE_ICONS={SELLER:"🏪",CS:"🛡️",MEMBER:"✅",GUEST:"👤"};
 function renderRoleGrid(){
+  // FIX: sama kayak renderUsers — jangan re-render kalau lagi ada input di grid ini yang difokus.
+  const gridEl=document.getElementById("roleGrid");
+  if(gridEl && gridEl.contains(document.activeElement)){ roleGridRenderPending=true; return; }
+  roleGridRenderPending=false;
   const grid=document.getElementById("roleGrid");
   if(!grid) return;
   const roleLimits = G.settings.role_limit || {};
